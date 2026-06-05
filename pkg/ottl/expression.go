@@ -1168,7 +1168,7 @@ func (g StandardBoolLikeGetter[K]) Get(ctx context.Context, tCtx K) (*bool, erro
 	return &result, nil
 }
 
-func (p *Parser[K]) newGetter(val value) (Getter[K], error) {
+func (p *parseContext[K]) newGetter(val value) (Getter[K], error) {
 	if val.IsNil != nil && *val.IsNil {
 		return newLiteral[K, any](nil), nil
 	}
@@ -1191,6 +1191,14 @@ func (p *Parser[K]) newGetter(val value) (Getter[K], error) {
 		return newLiteral[K, any](int64(*enum)), nil
 	}
 
+	if val.Lambda != nil {
+		lambExp, err := p.newLambdaExpression(val.Lambda)
+		if err != nil {
+			return nil, err
+		}
+		return newLiteral[K, any](lambExp), nil
+	}
+
 	if eL := val.Literal; eL != nil {
 		if f := eL.Float; f != nil {
 			return newLiteral[K, any](*f), nil
@@ -1207,6 +1215,9 @@ func (p *Parser[K]) newGetter(val value) (Getter[K], error) {
 		}
 		if eL.Converter != nil {
 			return p.newGetterFromConverter(*eL.Converter)
+		}
+		if eL.LocalIdentifier != nil {
+			return p.newLocalIdentifierGetter(eL.LocalIdentifier)
 		}
 	}
 
@@ -1241,7 +1252,7 @@ func (p *Parser[K]) newGetter(val value) (Getter[K], error) {
 	return p.evaluateMathExpression(val.MathExpression)
 }
 
-func (p *Parser[K]) newGetterFromConverter(c converter) (Getter[K], error) {
+func (p *parseContext[K]) newGetterFromConverter(c converter) (Getter[K], error) {
 	call, err := p.newFunctionCall(editor(c))
 	if err != nil {
 		return nil, err

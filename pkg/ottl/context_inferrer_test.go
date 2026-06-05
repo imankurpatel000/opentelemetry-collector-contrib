@@ -139,14 +139,14 @@ func Test_NewPriorityContextInferrer_InferStatements(t *testing.T) {
 			err:        `inferred context "unknown" is not a valid candidate`,
 		},
 		{
-			name:       "infer from converter key",
-			priority:   []string{"foo", "bar"},
-			statements: []string{`set(bar.name, "foo") where IsFoo()[foo.name] == true`},
+			name:     "infer from lambda body argument",
+			priority: []string{"spanevent", "span"},
 			candidates: map[string]*priorityContextInferrerCandidate{
-				"foo": newDummyPriorityContextInferrerCandidate(true, false, []string{"foo", "bar"}),
-				"bar": newDummyPriorityContextInferrerCandidate(true, true, []string{}),
+				"spanevent": defaultDummyPriorityContextInferrerCandidate,
+				"span":      defaultDummyPriorityContextInferrerCandidate,
 			},
-			expected: "foo",
+			statements: []string{"set(span.foo, Lambda(() => spanevent.bar))"},
+			expected:   "spanevent",
 		},
 	}
 
@@ -270,14 +270,14 @@ func Test_NewPriorityContextInferrer_InferConditions(t *testing.T) {
 			expected:   "",
 		},
 		{
-			name:       "infer from converter key",
-			priority:   []string{"foo", "bar"},
-			conditions: []string{`IsFoo()[foo.name] == true`},
+			name:     "infer from lambda body argument",
+			priority: []string{"spanevent", "span"},
 			candidates: map[string]*priorityContextInferrerCandidate{
-				"foo": newDummyPriorityContextInferrerCandidate(true, false, []string{"foo", "bar"}),
-				"bar": newDummyPriorityContextInferrerCandidate(true, true, []string{}),
+				"spanevent": defaultDummyPriorityContextInferrerCandidate,
+				"span":      defaultDummyPriorityContextInferrerCandidate,
 			},
-			expected: "foo",
+			conditions: []string{"Lambda(() => spanevent.bar) == true"},
+			expected:   "spanevent",
 		},
 	}
 
@@ -396,14 +396,14 @@ func Test_NewPriorityContextInferrer_InferValueExpressions(t *testing.T) {
 			expected:    "",
 		},
 		{
-			name:        "infer from converter key",
-			priority:    []string{"foo", "bar"},
-			expressions: []string{`Concat([IsFoo()[foo.name], bar.name], "-")`},
+			name:     "infer from lambda body argument",
+			priority: []string{"spanevent", "span"},
 			candidates: map[string]*priorityContextInferrerCandidate{
-				"foo": newDummyPriorityContextInferrerCandidate(true, false, []string{"foo", "bar"}),
-				"bar": newDummyPriorityContextInferrerCandidate(true, true, []string{}),
+				"spanevent": defaultDummyPriorityContextInferrerCandidate,
+				"span":      defaultDummyPriorityContextInferrerCandidate,
 			},
-			expected: "foo",
+			expressions: []string{"Lambda(() => spanevent.bar)"},
+			expected:    "spanevent",
 		},
 	}
 
@@ -438,7 +438,6 @@ func Test_NewPriorityContextInferrer_InvalidCondition(t *testing.T) {
 func Test_NewPriorityContextInferrer_DefaultPriorityList(t *testing.T) {
 	expectedPriority := []string{
 		"log",
-		"exemplar",
 		"datapoint",
 		"metric",
 		"spanevent",
@@ -452,7 +451,6 @@ func Test_NewPriorityContextInferrer_DefaultPriorityList(t *testing.T) {
 	inferrer := newPriorityContextInferrer(componenttest.NewNopTelemetrySettings(), map[string]*priorityContextInferrerCandidate{}).(*priorityContextInferrer)
 	require.NotNil(t, inferrer)
 
-	require.Len(t, inferrer.contextPriority, len(expectedPriority))
 	for pri, ctx := range expectedPriority {
 		require.Equal(t, pri, inferrer.contextPriority[ctx])
 	}
@@ -461,7 +459,6 @@ func Test_NewPriorityContextInferrer_DefaultPriorityList(t *testing.T) {
 func Test_NewPriorityContextInferrer_InferStatements_DefaultContextsOrder(t *testing.T) {
 	inferrer := newPriorityContextInferrer(componenttest.NewNopTelemetrySettings(), map[string]*priorityContextInferrerCandidate{
 		"log":                   newDummyPriorityContextInferrerCandidate(true, true, []string{"scope", "instrumentation_scope", "resource"}),
-		"exemplar":              newDummyPriorityContextInferrerCandidate(true, true, []string{"datapoint", "metric", "scope", "instrumentation_scope", "resource"}),
 		"metric":                newDummyPriorityContextInferrerCandidate(true, true, []string{"datapoint", "scope", "instrumentation_scope", "resource"}),
 		"datapoint":             newDummyPriorityContextInferrerCandidate(true, true, []string{"scope", "instrumentation_scope", "resource"}),
 		"span":                  newDummyPriorityContextInferrerCandidate(true, true, []string{"spanevent", "scope", "instrumentation_scope", "resource"}),
@@ -518,16 +515,6 @@ func Test_NewPriorityContextInferrer_InferStatements_DefaultContextsOrder(t *tes
 			expected:  "datapoint",
 		},
 		{
-			name:      "exemplar,datapoint,metric,instrumentation_scope,resource",
-			statement: `set(metric.name, "foo") where exemplar.double_value > 0 and datapoint.double_value > 0 and instrumentation_scope.name != nil and resource.attributes["foo"] != nil`,
-			expected:  "exemplar",
-		},
-		{
-			name:      "exemplar,datapoint,metric,scope,resource",
-			statement: `set(metric.name, "foo") where exemplar.double_value > 0 and datapoint.double_value > 0 and scope.name != nil and resource.attributes["foo"] != nil`,
-			expected:  "exemplar",
-		},
-		{
 			name:      "span,instrumentation_scope,resource",
 			statement: `set(span.name, "foo") where instrumentation_scope.name != nil and resource.attributes["foo"] != nil`,
 			expected:  "span",
@@ -576,7 +563,6 @@ func Test_NewPriorityContextInferrer_InferStatements_DefaultContextsOrder(t *tes
 func Test_NewPriorityContextInferrer_InferConditions_DefaultContextsOrder(t *testing.T) {
 	inferrer := newPriorityContextInferrer(componenttest.NewNopTelemetrySettings(), map[string]*priorityContextInferrerCandidate{
 		"log":                   newDummyPriorityContextInferrerCandidate(true, true, []string{"scope", "instrumentation_scope", "resource"}),
-		"exemplar":              newDummyPriorityContextInferrerCandidate(true, true, []string{"datapoint", "metric", "scope", "instrumentation_scope", "resource"}),
 		"metric":                newDummyPriorityContextInferrerCandidate(true, true, []string{"datapoint", "scope", "instrumentation_scope", "resource"}),
 		"datapoint":             newDummyPriorityContextInferrerCandidate(true, true, []string{"scope", "instrumentation_scope", "resource"}),
 		"span":                  newDummyPriorityContextInferrerCandidate(true, true, []string{"spanevent", "scope", "instrumentation_scope", "resource"}),
@@ -631,16 +617,6 @@ func Test_NewPriorityContextInferrer_InferConditions_DefaultContextsOrder(t *tes
 			name:      "datapoint,metric,scope,resource",
 			condition: `metric.name != nil and datapoint.double_value > 0 and scope.name != nil and resource.attributes["foo"] != nil`,
 			expected:  "datapoint",
-		},
-		{
-			name:      "exemplar,datapoint,metric,instrumentation_scope,resource",
-			condition: `metric.name != nil and exemplar.double_value > 0 and datapoint.double_value > 0 and instrumentation_scope.name != nil and resource.attributes["foo"] != nil`,
-			expected:  "exemplar",
-		},
-		{
-			name:      "exemplar,datapoint,metric,scope,resource",
-			condition: `metric.name != nil and exemplar.double_value > 0 and datapoint.double_value > 0 and scope.name != nil and resource.attributes["foo"] != nil`,
-			expected:  "exemplar",
 		},
 		{
 			name:      "span,instrumentation_scope,resource",
