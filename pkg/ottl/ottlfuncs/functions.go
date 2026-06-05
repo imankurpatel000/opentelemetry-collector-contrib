@@ -134,6 +134,7 @@ func converters[K any]() []ottl.Factory[K] {
 		NewProfileIDFactory[K](),
 		NewParseIntFactory[K](),
 		NewKeysFactory[K](),
+		NewMapFactory[K](),
 		NewXXH3Factory[K](),
 		NewXXH128Factory[K](),
 		NewIsInCIDRFactory[K](),

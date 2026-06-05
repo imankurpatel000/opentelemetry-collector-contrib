@@ -2867,3 +2867,59 @@ func createLambdaEvalFunction[K any](_ ottl.FunctionContext, oArgs ottl.Argument
 		return eval, err
 	}, nil
 }
+
+// Test_e2e_Map_correctness verifies that Map(attrs, ($k, $v) => [$k, String($v)])
+// produces the same result as stringify_all(attrs) for a mixed-type attribute map.
+func Test_e2e_Map_correctness(t *testing.T) {
+	t.Cleanup(ottltest.SetFeatureGateForTest(t, metadata.OttlFunctionsEnableLambdaFeatureGate, true))
+
+	settings := componenttest.NewNopTelemetrySettings()
+	parser, err := ottllog.NewParser(ottlfuncs.StandardFuncs[*ottllog.TransformContext](), settings, ottllog.EnablePathContextNames())
+	require.NoError(t, err)
+
+	// Parse the two statements
+	stringifyStmt, err := parser.ParseStatement(`stringify_all(log.attributes)`)
+	require.NoError(t, err)
+
+	mapStmt, err := parser.ParseStatement(`set(log.attributes, Map(log.attributes, ($k, $v) => [$k, String($v)]))`)
+	require.NoError(t, err)
+
+	// Build a log context with mixed-type attributes
+	buildCtx := func() *ottllog.TransformContext {
+		rLogs := plog.NewResourceLogs()
+		rLogs.Resource().Attributes().PutStr("service.name", "test-service")
+		sl := rLogs.ScopeLogs().AppendEmpty()
+		sl.Scope().SetName("test-scope")
+		lr := sl.LogRecords().AppendEmpty()
+		lr.Body().SetStr("test body")
+
+		attrs := lr.Attributes()
+		attrs.PutStr("str_key", "hello world")
+		attrs.PutInt("int_key", 42)
+		attrs.PutDouble("double_key", 3.14)
+		attrs.PutBool("bool_key", true)
+		nested := attrs.PutEmptyMap("map_key")
+		nested.PutStr("n1", "v1")
+		nested.PutInt("n2", 99)
+		sl2 := attrs.PutEmptySlice("slice_key")
+		sl2.AppendEmpty().SetStr("a")
+		sl2.AppendEmpty().SetInt(1)
+
+		return ottllog.NewTransformContextPtr(rLogs, sl, lr)
+	}
+
+	// Run stringify_all
+	stringifyCtx := buildCtx()
+	t.Cleanup(stringifyCtx.Close)
+	_, _, err = stringifyStmt.Execute(t.Context(), stringifyCtx)
+	require.NoError(t, err)
+
+	// Run set(log.attributes, Map(...))
+	mapCtx := buildCtx()
+	t.Cleanup(mapCtx.Close)
+	_, _, err = mapStmt.Execute(t.Context(), mapCtx)
+	require.NoError(t, err)
+
+	// Both should produce the same attributes
+	require.NoError(t, plogtest.CompareResourceLogs(newResourceLogs(stringifyCtx), newResourceLogs(mapCtx)))
+}
