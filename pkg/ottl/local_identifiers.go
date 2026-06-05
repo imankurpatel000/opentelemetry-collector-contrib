@@ -76,7 +76,8 @@ func withLocalBindings(ctx context.Context, bindings map[string]any, fn func(con
 }
 
 type localBindingGetter[K any] struct {
-	identifierPath *localIdentifier
+	name string
+	keys []Key[K]
 }
 
 func (p *parseContext[K]) newLocalIdentifierGetter(identifierPath *localIdentifier) (Getter[K], error) {
@@ -87,19 +88,23 @@ func (p *parseContext[K]) newLocalIdentifierGetter(identifierPath *localIdentifi
 	if !p.localScopes.inScope(name) {
 		return nil, fmt.Errorf("local identifier %s is not in scope", name)
 	}
-	return &localBindingGetter[K]{identifierPath: identifierPath}, nil
+	keys, err := p.newKeys(identifierPath.Keys)
+	if err != nil {
+		return nil, fmt.Errorf("invalid keys for local identifier %s: %w", name, err)
+	}
+	return &localBindingGetter[K]{name: name, keys: keys}, nil
 }
 
 func (g *localBindingGetter[K]) Get(ctx context.Context, tCtx K) (any, error) {
 	bindings, ok := ctx.Value(localBindingsKey{}).(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("local identifier %s evaluated outside of a local binding scope", g.identifierPath.Name)
+		return nil, fmt.Errorf("local identifier %s evaluated outside of a local binding scope", g.name)
 	}
-	v, ok := bindings[string(g.identifierPath.Name)]
+	v, ok := bindings[g.name]
 	if !ok {
-		return nil, fmt.Errorf("missing value for local identifier %s", g.identifierPath.Name)
+		return nil, fmt.Errorf("missing value for local identifier %s", g.name)
 	}
-	if len(g.identifierPath.Keys) > 0 {
+	if len(g.keys) > 0 {
 		return g.getIndexableValue(ctx, tCtx, v)
 	}
 	return v, nil
@@ -110,12 +115,12 @@ func (g *localBindingGetter[K]) getIndexableValue(ctx context.Context, tCtx K, v
 		expr: Expr[K]{exprFunc: func(context.Context, K) (any, error) {
 			return val, nil
 		}},
-		keys: g.identifierPath.Keys,
+		keys: g.keys,
 	}
 
 	result, err := getter.Get(ctx, tCtx)
 	if err != nil {
-		return nil, fmt.Errorf("cannot index local identifier %s: %w", g.identifierPath.Name, err)
+		return nil, fmt.Errorf("cannot index local identifier %s: %w", g.name, err)
 	}
 
 	return result, nil

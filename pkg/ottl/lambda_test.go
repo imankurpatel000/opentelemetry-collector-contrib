@@ -116,7 +116,7 @@ func TestLambdaExpression_Eval(t *testing.T) {
 			expr: &LambdaExpression[any]{
 				paramNames: makeLocalIdentifiers("$a"),
 				body: &localBindingGetter[any]{
-					identifierPath: &localIdentifier{Name: localIdentifierDecl("$a")},
+					name: "$a",
 				},
 			},
 			params: []any{42},
@@ -126,7 +126,7 @@ func TestLambdaExpression_Eval(t *testing.T) {
 			name: "parent binding is available",
 			expr: &LambdaExpression[any]{
 				body: &localBindingGetter[any]{
-					identifierPath: &localIdentifier{Name: localIdentifierDecl("$parent")},
+					name: "$parent",
 				},
 			},
 			ctx:    context.WithValue(t.Context(), localBindingsKey{}, map[string]any{"$parent": "value"}),
@@ -138,7 +138,7 @@ func TestLambdaExpression_Eval(t *testing.T) {
 			expr: &LambdaExpression[any]{
 				paramNames: makeLocalIdentifiers("$a"),
 				body: &localBindingGetter[any]{
-					identifierPath: &localIdentifier{Name: localIdentifierDecl("$a")},
+					name: "$a",
 				},
 			},
 			ctx:    context.WithValue(t.Context(), localBindingsKey{}, map[string]any{"$a": "old"}),
@@ -150,12 +150,10 @@ func TestLambdaExpression_Eval(t *testing.T) {
 			expr: &LambdaExpression[any]{
 				paramNames: makeLocalIdentifiers("$a"),
 				body: &localBindingGetter[any]{
-					identifierPath: &localIdentifier{
-						Name: localIdentifierDecl("$a"),
-						Keys: []key{
-							{String: ottltest.Strp("name")},
-							{Int: ottltest.Intp(1)},
-						},
+					name: "$a",
+					keys: []Key[any]{
+						&baseKey[any]{s: ottltest.Strp("name")},
+						&baseKey[any]{i: ottltest.Intp(1)},
 					},
 				},
 			},
@@ -175,7 +173,7 @@ func TestLambdaExpression_Eval(t *testing.T) {
 			expr: &LambdaExpression[any]{
 				paramNames: makeLocalIdentifiers("_", "$a"),
 				body: &localBindingGetter[any]{
-					identifierPath: &localIdentifier{Name: localIdentifierDecl("$a")},
+					name: "$a",
 				},
 			},
 			params: []any{"skip", "bound"},

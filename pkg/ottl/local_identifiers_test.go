@@ -48,7 +48,7 @@ func Test_newLocalBindingGetter(t *testing.T) {
 			name:             "valid",
 			identifierPath:   &localIdentifier{Name: "$value"},
 			localScopeFrames: []localScopeFrame{{"$value": {}}},
-			want:             &localBindingGetter[any]{identifierPath: &localIdentifier{Name: "$value"}},
+			want:             &localBindingGetter[any]{name: "$value"},
 		},
 		{
 			name:           "local identifier outside scoped body",
@@ -98,36 +98,28 @@ func TestLocalBindingGetter_Get(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name: "outside binding scope",
-			getter: &localBindingGetter[any]{
-				identifierPath: &localIdentifier{Name: localIdentifierDecl("$missing")},
-			},
+			name:    "outside binding scope",
+			getter:  &localBindingGetter[any]{name: "$missing"},
 			ctx:     t.Context(),
 			wantErr: "local identifier $missing evaluated outside of a local binding scope",
 		},
 		{
-			name: "missing binding",
-			getter: &localBindingGetter[any]{
-				identifierPath: &localIdentifier{Name: localIdentifierDecl("$missing")},
-			},
+			name:    "missing binding",
+			getter:  &localBindingGetter[any]{name: "$missing"},
 			ctx:     context.WithValue(t.Context(), localBindingsKey{}, map[string]any{"other": 1}),
 			wantErr: "missing value for local identifier $missing",
 		},
 		{
-			name: "returns direct binding",
-			getter: &localBindingGetter[any]{
-				identifierPath: &localIdentifier{Name: localIdentifierDecl("$value")},
-			},
-			ctx:  context.WithValue(t.Context(), localBindingsKey{}, map[string]any{"$value": "ok"}),
-			want: "ok",
+			name:   "returns direct binding",
+			getter: &localBindingGetter[any]{name: "$value"},
+			ctx:    context.WithValue(t.Context(), localBindingsKey{}, map[string]any{"$value": "ok"}),
+			want:   "ok",
 		},
 		{
 			name: "returns indexed binding",
 			getter: &localBindingGetter[any]{
-				identifierPath: &localIdentifier{
-					Name: localIdentifierDecl("$value"),
-					Keys: []key{{String: ottltest.Strp("field")}},
-				},
+				name: "$value",
+				keys: []Key[any]{&baseKey[any]{s: ottltest.Strp("field")}},
 			},
 			ctx:  context.WithValue(t.Context(), localBindingsKey{}, map[string]any{"$value": map[string]any{"field": "ok"}}),
 			want: "ok",
@@ -135,10 +127,8 @@ func TestLocalBindingGetter_Get(t *testing.T) {
 		{
 			name: "indexing error is wrapped",
 			getter: &localBindingGetter[any]{
-				identifierPath: &localIdentifier{
-					Name: localIdentifierDecl("$value"),
-					Keys: []key{{Int: ottltest.Intp(2)}},
-				},
+				name: "$value",
+				keys: []Key[any]{&baseKey[any]{i: ottltest.Intp(2)}},
 			},
 			ctx:     context.WithValue(t.Context(), localBindingsKey{}, map[string]any{"$value": []any{"only"}}),
 			wantErr: "cannot index local identifier $value: index 2 out of bounds",

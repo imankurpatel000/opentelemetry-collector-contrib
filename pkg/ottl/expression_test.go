@@ -894,9 +894,7 @@ func Test_newGetter(t *testing.T) {
 			want: &LambdaExpression[any]{
 				paramNames: makeLocalIdentifiers("$value"),
 				body: &localBindingGetter[any]{
-					identifierPath: &localIdentifier{
-						Name: "$value",
-					},
+					name: "$value",
 				},
 			},
 		},
@@ -997,7 +995,7 @@ func Test_newGetter_dynamic_path_key(t *testing.T) {
 		},
 	}
 
-	reader, err := p.newGetter(val)
+	reader, err := p.newParseContext().newGetter(val)
 	require.NoError(t, err)
 
 	got, err := reader.Get(t.Context(), nil)
