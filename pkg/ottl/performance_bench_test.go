@@ -17,7 +17,9 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/contexts/ottllog"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/contexts/ottlmetric"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/contexts/ottlspan"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/internal/metadata"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/ottlfuncs"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/ottltest"
 )
 
 const benchmarkContextPoolSize = 32
@@ -760,4 +762,56 @@ func newMixedTypesMap(n int) pcommon.Map {
 		s.AppendEmpty().SetStr("c")
 	}
 	return m
+}
+
+func BenchmarkStringifyLambdaMap(b *testing.B) {
+	// Enable lambda feature gate
+	b.Cleanup(ottltest.SetFeatureGateForTest(b, metadata.OttlFunctionsEnableLambdaFeatureGate, true))
+
+	settings := componenttest.NewNopTelemetrySettings()
+	parser, err := ottllog.NewParser(ottlfuncs.StandardFuncs[*ottllog.TransformContext](), settings, ottllog.EnablePathContextNames())
+	if err != nil {
+		b.Fatalf("failed to create log parser: %v", err)
+	}
+
+	stmt := `set(log.attributes, Map(log.attributes, ($k, $v) => [$k, String($v)]))`
+	parsed, err := parser.ParseStatements([]string{stmt})
+	if err != nil {
+		b.Fatalf("failed to parse statement: %v", err)
+	}
+	sequence := ottllog.NewStatementSequence(parsed, settings)
+
+	scenarios := []struct {
+		name     string
+		template pcommon.Map
+	}{
+		{"all_strings_20", newAllStringsMap(20)},
+		{"mixed_types_20", newMixedTypesMap(20)},
+		{"mixed_types_50", newMixedTypesMap(50)},
+	}
+
+	ctx := b.Context()
+
+	for _, scenario := range scenarios {
+		logs := plog.NewLogs()
+		rl := logs.ResourceLogs().AppendEmpty()
+		rl.Resource().Attributes().PutStr("service.name", "bench")
+		sl := rl.ScopeLogs().AppendEmpty()
+		lr := sl.LogRecords().AppendEmpty()
+		lr.Body().SetStr("benchmark")
+		scenario.template.CopyTo(lr.Attributes())
+		tCtx := ottllog.NewTransformContextPtr(rl, sl, lr)
+
+		b.Run(scenario.name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				scenario.template.CopyTo(lr.Attributes())
+				if err := sequence.Execute(ctx, tCtx); err != nil {
+					b.Fatalf("execute failed: %v", err)
+				}
+			}
+		})
+		tCtx.Close()
+	}
 }
